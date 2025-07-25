@@ -95,6 +95,19 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'DVL Analytics API',
+    status: 'online',
+    endpoints: {
+      health: '/api/health',
+      dashboard: '/dashboard',
+      tracking: '/dvl-analytics.js'
+    }
+  });
+});
+
 // Tracking endpoint (requires API key)
 app.post('/api/track', validateApiKey, (req, res) => {
   const { type, data } = req.body;
@@ -136,13 +149,6 @@ app.post('/api/track', validateApiKey, (req, res) => {
       default:
         return res.status(400).json({ error: 'Invalid tracking type' });
     }
-    
-    // Broadcast to WebSocket clients
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: 'new_data', dataType: type, data }));
-      }
-    });
     
     res.json({ success: true, message: 'Data tracked successfully' });
   } catch (error) {
@@ -458,24 +464,8 @@ app.get('/dvl-analytics.js', (req, res) => {
   `);
 });
 
-// WebSocket server for real-time updates
-const wss = new WebSocket.Server({ port: WS_PORT });
-
-wss.on('connection', (ws) => {
-  console.log('WebSocket client connected');
-  
-  ws.on('message', (message) => {
-    console.log('Received:', message);
-  });
-  
-  ws.on('close', () => {
-    console.log('WebSocket client disconnected');
-  });
-});
-
 // Start HTTP server
 app.listen(PORT, () => {
-  console.log(\`DVL Analytics API running on port \${PORT}\`);
-  console.log(\`WebSocket server running on port \${WS_PORT}\`);
-  console.log(\`Dashboard: http://localhost:\${PORT}/dashboard\`);
+  console.log('DVL Analytics API running on port ' + PORT);
+  console.log('Dashboard: http://localhost:' + PORT + '/dashboard');
 });
