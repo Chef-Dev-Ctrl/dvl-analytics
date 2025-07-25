@@ -3,10 +3,16 @@ const cors = require('cors');
 const sqlite3 = require('sqlite3').verbose();
 const WebSocket = require('ws');
 const path = require('path');
+const http = require('http');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
-const WS_PORT = process.env.WS_PORT || 8081;
+
+// Create HTTP server
+const server = http.createServer(app);
+
+// Create WebSocket server on the same port
+const wss = new WebSocket.Server({ server });
 
 // Initialize SQLite database
 const db = new sqlite3.Database('./analytics.db');
@@ -352,10 +358,47 @@ app.get('/dashboard', (req, res) => {
             }
         }
         
+        // WebSocket connection for real-time updates
+        let ws = null;
+        function connectWebSocket() {
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = protocol + '//' + window.location.host;
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = function() {
+                    console.log('WebSocket connected');
+                    document.getElementById('status').innerHTML = '<span class="online">● Online (Real-time)</span>';
+                };
+                
+                ws.onmessage = function(event) {
+                    console.log('Real-time update received');
+                    loadData(); // Refresh data when real-time update received
+                };
+                
+                ws.onclose = function() {
+                    console.log('WebSocket disconnected');
+                    document.getElementById('status').innerHTML = '<span class="error">● Disconnected</span>';
+                    // Try to reconnect after 5 seconds
+                    setTimeout(connectWebSocket, 5000);
+                };
+                
+                ws.onerror = function(error) {
+                    console.log('WebSocket error:', error);
+                    document.getElementById('status').innerHTML = '<span class="error">● Connection Error</span>';
+                };
+            } catch (error) {
+                console.log('WebSocket connection failed:', error);
+            }
+        }
+        
         // Load data on page load
         loadData();
         
-        // Auto-refresh every 30 seconds
+        // Connect WebSocket for real-time updates
+        connectWebSocket();
+        
+        // Auto-refresh every 30 seconds as fallback
         setInterval(loadData, 30000);
     </script>
 </body>
@@ -464,8 +507,27 @@ app.get('/dvl-analytics.js', (req, res) => {
   `);
 });
 
+// WebSocket server for real-time updates
+wss.on('connection', (ws) => {
+  console.log('WebSocket client connected');
+  
+  ws.on('message', (message) => {
+    console.log('Received:', message);
+  });
+  
+  ws.on('close', () => {
+    console.log('WebSocket client disconnected');
+  });
+});
+
+// Favicon endpoint
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end(); // No content
+});
+
 // Start HTTP server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log('DVL Analytics API running on port ' + PORT);
+  console.log('WebSocket server running on same port');
   console.log('Dashboard: http://localhost:' + PORT + '/dashboard');
 });
